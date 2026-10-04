@@ -137,6 +137,28 @@ def _extract_parts(parts: list) -> list[dict]:
     return out
 
 
+def _extract_parts_from_history(history: list) -> list[dict]:
+    out: list[dict] = []
+    for msg in history:
+        if getattr(msg, "role", None) == Role.agent:
+            for p in getattr(msg, "parts", []) or []:
+                root = getattr(p, "root", p)
+                if isinstance(root, TextPart) and getattr(root, "text", None):
+                    text = root.text
+                    if "Cannot add session to memory" not in text:
+                        out.append({"kind": "text", "text": text})
+                elif getattr(root, "data", None) is not None:
+                    meta = getattr(root, "metadata", None) or {}
+                    mime = meta.get("mimeType") if isinstance(meta, dict) else None
+                    if mime == _A2UI_MIME or "a2ui" in str(mime):
+                        out.append({"kind": "a2ui", "data": root.data})
+                elif isinstance(root, FilePart):
+                    uri = getattr(getattr(root, "file", None), "uri", None)
+                    if uri:
+                        out.append({"kind": "text", "text": uri})
+    return out
+
+
 @app.post("/chat")
 async def chat(req: Request):
     body = await req.json()
@@ -178,10 +200,13 @@ async def chat(req: Request):
                 got_artifact_update = True
                 parts.extend(_extract_parts(update.artifact.parts))
 
-        # Non-streaming fallback: pull parts from the final task's artifacts.
-        if not got_artifact_update and last_task is not None:
-            for artifact in getattr(last_task, "artifacts", None) or []:
-                parts.extend(_extract_parts(artifact.parts))
+        # Non-streaming fallback: pull parts from task history or task artifacts
+        if not parts and last_task is not None:
+            if getattr(last_task, "history", None):
+                parts.extend(_extract_parts_from_history(last_task.history))
+            if not parts and getattr(last_task, "artifacts", None):
+                for artifact in last_task.artifacts:
+                    parts.extend(_extract_parts(artifact.parts))
 
     if not parts:
         # The turn produced no text or UI (e.g. the agent only ran tools, or a

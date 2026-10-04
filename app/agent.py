@@ -52,7 +52,10 @@ def get_firestore_client() -> firestore.Client:
 
 async def generate_memories_callback(callback_context: CallbackContext):
     """WRITE: After each turn, send the session events to Memory Bank for extraction."""
-    await callback_context.add_session_to_memory()
+    try:
+        await callback_context.add_session_to_memory()
+    except Exception:
+        pass
     return None
 
 
