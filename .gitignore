@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+recordings/
+lofi_bg_music.wav
+generate_lofi.py
+record_demo.py
+*.log
+.env
+.DS_Store
